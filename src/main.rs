@@ -1,8 +1,11 @@
 use std::any::TypeId;
 use winit::{window::Window, event::*, event_loop::{ControlFlow, EventLoop}, window::WindowBuilder};
 use std::error::Error;
+use std::f32::consts::PI;
 use std::fmt::{Display, Formatter};
-use wgpu::include_wgsl;
+use log::{Level, LevelFilter, log};
+use wgpu::{include_wgsl, VertexBufferLayout};
+use wgpu::util::DeviceExt;
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
@@ -28,6 +31,109 @@ impl Error for GraphicsError {
         None
     }
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Zeroable, bytemuck::Pod)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3]
+}
+
+struct Model {
+    vertex_buffer: wgpu::Buffer,
+    index_buffer: wgpu::Buffer,
+    num_vertices: u32
+}
+
+impl Model {
+    pub fn new(device: &wgpu::Device) -> Model {
+        let pentagram_vertices = make_pentagram_vertices();
+        log!(Level::Info, "Pentagram vertices: {:?}", pentagram_vertices);
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&pentagram_vertices),
+            usage: wgpu::BufferUsages::VERTEX
+        });
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(PENTAGRAM_INDICES),
+            usage: wgpu::BufferUsages::INDEX
+        });
+        let num_vertices = PENTAGRAM_INDICES.len() as u32;
+        Self { vertex_buffer, index_buffer, num_vertices }
+    }
+}
+
+impl Vertex {
+    fn desc<'a> () -> wgpu::VertexBufferLayout<'a> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 0,
+                    format: wgpu::VertexFormat::Float32x3
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x3
+                }
+            ]
+        }
+    }
+}
+
+const TRIANGLE_VERTICES: &[Vertex] = &[
+    Vertex { position: [0.0, 0.5, 0.0], color: [1.0, 0.0, 0.0]},
+    Vertex { position: [-0.5, -0.5, 0.5], color: [0.0, 1.0, 0.0]},
+    Vertex { position: [0.5, -0.5, 0.0], color: [0.0, 0.0, 1.0]}
+];
+
+const PENTAGON_VERTICES: &[Vertex] = &[
+    Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.5] }, // A
+    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, // B
+    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.5, 0.0, 0.5] }, // C
+    Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.0, 0.5] }, // D
+    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [0.5, 0.0, 0.5] }, // E
+];
+
+
+fn penta_step(n: f32) -> f32 { (-2.0 * PI/5.0) * n - PI/2.0 }
+
+fn make_pentagram_vertices() -> Vec<Vertex> {
+    vec![
+        Vertex { position: [penta_step(0.0).cos()/2.0, penta_step(0.0).sin()/2.0, 0.0], color: [0.5, 0.0, 0.5] },
+        Vertex { position: [penta_step(1.0).cos()/2.0, penta_step(1.0).sin()/2.0, 0.0], color: [0.5, 0.0, 0.5] },
+        Vertex { position: [penta_step(2.0).cos()/2.0, penta_step(2.0).sin()/2.0, 0.0], color: [0.5, 0.0, 0.5] },
+        Vertex { position: [penta_step(3.0).cos()/2.0, penta_step(3.0).sin()/2.0, 0.0], color: [0.5, 0.0, 0.5] },
+        Vertex { position: [penta_step(4.0).cos()/2.0, penta_step(4.0).sin()/2.0, 0.0], color: [0.5, 0.0, 0.5] },
+        Vertex { position: [penta_step(0.5).cos(), penta_step(0.5).sin(), 0.0], color: [0.5, 0.0, 0.5]},
+        Vertex { position: [penta_step(1.5).cos(), penta_step(1.5).sin(), 0.0], color: [0.5, 0.0, 0.5]},
+        Vertex { position: [penta_step(2.5).cos(), penta_step(2.5).sin(), 0.0], color: [0.5, 0.0, 0.5]},
+        Vertex { position: [penta_step(3.5).cos(), penta_step(3.5).sin(), 0.0], color: [0.5, 0.0, 0.5]},
+        Vertex { position: [penta_step(4.5).cos(), penta_step(4.5).sin(), 0.0], color: [0.5, 0.0, 0.5]},
+    ]
+}
+
+const PENTAGRAM_INDICES: &[u16] = &[
+    0, 2, 1,
+    0, 3, 2,
+    0, 4, 3,
+    0, 1, 5,
+    1, 2, 6,
+    2, 3, 7,
+    3, 4, 8,
+    4, 0, 9,
+];
+
+const PENTAGON_INDICES: &[u16] = &[
+    0, 1, 4,
+    1, 2, 4,
+    2, 3, 4,
+];
+
 
 struct Flip<T> {
     alternatives: [T; 2],
@@ -59,6 +165,7 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     background_color: wgpu::Color,
     render_pipelines: Flip<wgpu::RenderPipeline>,
+    vertices: Model,
 }
 
 fn interpolate_color(from: wgpu::Color, to: wgpu::Color, factor: f64) -> wgpu::Color {
@@ -84,7 +191,7 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: "vs_main",
-                buffers: &[],
+                buffers: &[Vertex::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -149,7 +256,9 @@ impl State {
 
         let render_pipelines = Flip::new(render_pipeline, render_pipeline_alter);
 
-        Ok(Self { surface, device, queue, config, size, background_color, render_pipelines })
+        let vertices = Model::new(&device);
+
+        Ok(Self { surface, device, queue, config, size, background_color, render_pipelines, vertices })
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -205,7 +314,9 @@ impl State {
                 depth_stencil_attachment: None,
             });
             render_pass.set_pipeline(&self.render_pipelines.get());
-            render_pass.draw(0..3, 0..1);
+            render_pass.set_vertex_buffer(0, self.vertices.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.vertices.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.vertices.num_vertices, 0, 0..1);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
@@ -214,7 +325,7 @@ impl State {
 }
 
 fn main() -> Result<()> {
-    env_logger::init();
+    env_logger::builder().filter_level(LevelFilter::Info).init();
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop)?;
     let mut state = pollster::block_on(State::new(&window))?;
