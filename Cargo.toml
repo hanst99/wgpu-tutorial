@@ -1,0 +1,21 @@
+[package]
+name = "hello-wgpu"
+version = "0.1.0"
+edition = "2018"
+resolver = "2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+image = "0.23.14"
+cgmath = "0.18.0"
+env_logger = "0.9.0"
+log = "0.4.14"
+pollster = "0.2.4"
+winit = "0.26"
+
+[dependencies.sdl2]
+version = "0.34.5"
+
+[dependencies.wgpu]
+version = "0.12"
