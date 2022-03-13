@@ -14,6 +14,8 @@ log = "0.4.14"
 pollster = "0.2.4"
 winit = "0.26"
 bytemuck = {version = "1.8.0", features = [ "derive"] }
+serde = {version = "1.0.136", features = ["derive"]}
+serde_json = "1.0.79"
 
 [dependencies.wgpu]
 version = "0.12"
