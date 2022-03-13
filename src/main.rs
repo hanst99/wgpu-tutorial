@@ -15,8 +15,9 @@ use winit::{
     window::Window,
     window::WindowBuilder,
 };
+use anyhow::Result;
 
-type Result<T> = std::result::Result<T, Box<dyn Error>>;
+mod texture;
 
 #[derive(Debug)]
 struct GraphicsError(&'static str);
