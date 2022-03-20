@@ -15,7 +15,7 @@ use winit::{
     window::Window,
     window::WindowBuilder,
 };
-use anyhow::Result;
+use anyhow::{Result, Context};
 
 mod texture;
 
@@ -252,56 +252,8 @@ impl State {
         };
         surface.configure(&device, &config);
 
-        let image = image::load(std::io::BufReader::new(File::open("assets/tree.png")?), Png)?;
-        let image_rgba = image
-            .as_rgba8()
-            .ok_or(GraphicsError("failed to get image as RGBA"))?;
-
-        let dimension = image.dimensions();
-
-        let texture_size = wgpu::Extent3d {
-            width: dimension.0,
-            height: dimension.1,
-            depth_or_array_layers: 1,
-        };
-
-        let diffuse_texture = device.create_texture(&wgpu::TextureDescriptor {
-            size: texture_size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            label: Some("tree::texture::diffuse"),
-        });
-
-        queue.write_texture(
-            wgpu::ImageCopyTexture {
-                texture: &diffuse_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            image_rgba,
-            wgpu::ImageDataLayout {
-                offset: 0,
-                bytes_per_row: std::num::NonZeroU32::new(4 * dimension.0),
-                rows_per_image: std::num::NonZeroU32::new(dimension.1),
-            },
-            texture_size,
-        );
-
-        let diffuse_texture_view =
-            diffuse_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let diffuse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let image = image::load(std::io::BufReader::new(File::open("assets/tree.png").context("failed to open assets/tree.png")?), Png).context("failed to read tree as PNG")?;
+        let diffuse_texture = texture::Texture::from_image(&device, &queue, &image, Some("tree.png"))?;
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -331,11 +283,11 @@ impl State {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture_view),
+                    resource: wgpu::BindingResource::TextureView(diffuse_texture.view()),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_sampler),
+                    resource: wgpu::BindingResource::Sampler(diffuse_texture.sampler()),
                 },
             ],
             label: Some("diffuse_bind_group"),
@@ -454,11 +406,6 @@ impl State {
 
 fn main() -> Result<()> {
     env_logger::builder().filter_level(LevelFilter::Info).init();
-    let img = image::load(
-        std::io::BufReader::new(File::open("assets/tree.png")?),
-        ImageFormat::Png,
-    )?;
-    println!("Image [{:?}, {:?}]", img.width(), img.height());
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new().build(&event_loop)?;
     let mut state = pollster::block_on(State::new(&window))?;

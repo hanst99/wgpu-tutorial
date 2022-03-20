@@ -1,10 +1,19 @@
 use image::GenericImageView;
 use anyhow::Result;
-
 use std::error::Error;
+use std::fmt::{Display, Formatter};
 
-#[derive(Error)]
+#[derive(Debug)]
 struct TextureError(String);
+
+impl Display for TextureError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Texture error: ")?;
+        f.write_str(&self.0)
+    }
+}
+
+impl Error for TextureError { }
 
 
 
@@ -73,8 +82,12 @@ impl Texture {
                 address_mode_u: wgpu::AddressMode::ClampToEdge,
                 address_mode_v: wgpu::AddressMode::ClampToEdge,
                 address_mode_w: wgpu::AddressMode::ClampToEdge,
-                mag_filter:
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Nearest,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                ..Default::default()
             }
-        )
+        );
+        Ok(Self{texture,view,sampler})
     }
 }
