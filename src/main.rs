@@ -1,5 +1,7 @@
+use crate::texture::Texture;
+use anyhow::{Context, Result};
 use image::ImageFormat::Png;
-use image::{GenericImageView, ImageFormat};
+use image::GenericImageView;
 use log::{log, Level, LevelFilter};
 use serde::Deserialize;
 use std::any::TypeId;
@@ -15,7 +17,6 @@ use winit::{
     window::Window,
     window::WindowBuilder,
 };
-use anyhow::{Result, Context};
 
 mod texture;
 
@@ -158,6 +159,7 @@ struct State {
     render_pipelines: Flip<wgpu::RenderPipeline>,
     model: Model,
     diffuse_bind_group: wgpu::BindGroup,
+    diffuse_texture: Texture,
 }
 
 fn interpolate_color(from: wgpu::Color, to: wgpu::Color, factor: f64) -> wgpu::Color {
@@ -252,8 +254,15 @@ impl State {
         };
         surface.configure(&device, &config);
 
-        let image = image::load(std::io::BufReader::new(File::open("assets/tree.png").context("failed to open assets/tree.png")?), Png).context("failed to read tree as PNG")?;
-        let diffuse_texture = texture::Texture::from_image(&device, &queue, &image, Some("tree.png"))?;
+        let image = image::load(
+            std::io::BufReader::new(
+                File::open("assets/tree.png").context("failed to open assets/tree.png")?,
+            ),
+            Png,
+        )
+        .context("failed to read tree as PNG")?;
+        let diffuse_texture =
+            texture::Texture::from_image(&device, &queue, &image, Some("tree.png"))?;
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -321,6 +330,7 @@ impl State {
             render_pipelines,
             model,
             diffuse_bind_group,
+            diffuse_texture,
         })
     }
 
