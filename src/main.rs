@@ -1,18 +1,13 @@
 use crate::texture::Texture;
 use anyhow::{Context, Result};
-use image::GenericImageView;
 use image::ImageFormat::Png;
-use log::{log, Level, LevelFilter};
-use serde::Deserialize;
-use std::any::TypeId;
+use log::LevelFilter;
+use model::{Model, ModelData, Vertex};
 use std::error::Error;
-use std::f32::consts::PI;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::BufReader;
 use std::path::Path;
-use wgpu::util::DeviceExt;
-use wgpu::{include_wgsl, VertexBufferLayout};
+use wgpu::include_wgsl;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -20,6 +15,7 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod model;
 mod texture;
 
 #[derive(Debug)]
@@ -42,93 +38,6 @@ impl Error for GraphicsError {
 
     fn cause(&self) -> Option<&dyn Error> {
         None
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, bytemuck::Zeroable, bytemuck::Pod)]
-struct Vertex {
-    position: [f32; 3],
-    uv: [f32; 2],
-}
-
-impl Vertex {
-    fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct ModelData {
-    positions: Vec<[f32; 3]>,
-    uvs: Vec<[f32; 2]>,
-    indices: Vec<u16>,
-}
-
-impl ModelData {
-    pub fn vertices(&self) -> Vec<Vertex> {
-        self.positions
-            .iter()
-            .zip(self.uvs.iter())
-            .map(|(&position, &uv)| Vertex { position, uv })
-            .collect()
-    }
-
-    pub fn indices(&self) -> &[u16] {
-        &self.indices
-    }
-
-    pub fn load(path: &Path) -> Result<ModelData> {
-        serde_json::from_reader(BufReader::new(
-            File::open(path).with_context(|| format!("ModelData::load({:?})", path))?,
-        ))
-        .map_err(|err| anyhow::Error::from(err))
-    }
-}
-
-struct Model {
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    num_vertices: u32,
-}
-
-impl Model {
-    pub fn new(device: &wgpu::Device, model_data: &ModelData) -> Result<Model> {
-        let vertices = model_data.vertices();
-        log!(Level::Info, "vertices = #{:?}", vertices);
-        let indices = model_data.indices();
-        log!(Level::Info, "indices = #{:?}", indices);
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-        let num_vertices = indices.len() as u32;
-        Ok(Self {
-            vertex_buffer,
-            index_buffer,
-            num_vertices,
-        })
     }
 }
 
@@ -409,10 +318,12 @@ impl State {
             });
             render_pass.set_pipeline(&self.render_pipelines.get());
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.model.vertex_buffer.slice(..));
-            render_pass
-                .set_index_buffer(self.model.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.model.num_vertices, 0, 0..1);
+            render_pass.set_vertex_buffer(0, self.model.vertex_buffer().slice(..));
+            render_pass.set_index_buffer(
+                self.model.index_buffer().slice(..),
+                wgpu::IndexFormat::Uint16,
+            );
+            render_pass.draw_indexed(0..self.model.num_vertices(), 0, 0..1);
         }
         self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
