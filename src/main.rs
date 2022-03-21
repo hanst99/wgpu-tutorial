@@ -1,7 +1,7 @@
 use crate::texture::Texture;
 use anyhow::{Context, Result};
-use image::ImageFormat::Png;
 use image::GenericImageView;
+use image::ImageFormat::Png;
 use log::{log, Level, LevelFilter};
 use serde::Deserialize;
 use std::any::TypeId;
@@ -9,6 +9,8 @@ use std::error::Error;
 use std::f32::consts::PI;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
 use wgpu::util::DeviceExt;
 use wgpu::{include_wgsl, VertexBufferLayout};
 use winit::{
@@ -90,6 +92,13 @@ impl ModelData {
     pub fn indices(&self) -> &[u16] {
         &self.indices
     }
+
+    pub fn load(path: &Path) -> Result<ModelData> {
+        serde_json::from_reader(BufReader::new(
+            File::open(path).with_context(|| format!("ModelData::load({:?})", path))?,
+        ))
+        .map_err(|err| anyhow::Error::from(err))
+    }
 }
 
 struct Model {
@@ -99,11 +108,7 @@ struct Model {
 }
 
 impl Model {
-    fn load() -> ModelData {
-        serde_json::from_str(include_str!("rectangle.model")).expect("model data layout")
-    }
-    pub fn new(device: &wgpu::Device) -> Model {
-        let model_data = Self::load();
+    pub fn new(device: &wgpu::Device, model_data: &ModelData) -> Result<Model> {
         let vertices = model_data.vertices();
         log!(Level::Info, "vertices = #{:?}", vertices);
         let indices = model_data.indices();
@@ -119,11 +124,11 @@ impl Model {
             usage: wgpu::BufferUsages::INDEX,
         });
         let num_vertices = indices.len() as u32;
-        Self {
+        Ok(Self {
             vertex_buffer,
             index_buffer,
             num_vertices,
-        }
+        })
     }
 }
 
@@ -318,7 +323,8 @@ impl State {
 
         let render_pipelines = Flip::new(render_pipeline, render_pipeline_alter);
 
-        let model = Model::new(&device);
+        let model_data = ModelData::load(Path::new("assets/rectangle.model"))?;
+        let model = Model::new(&device, &model_data)?;
 
         Ok(Self {
             surface,
