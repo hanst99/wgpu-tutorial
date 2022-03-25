@@ -10,12 +10,19 @@ struct Vertex {
  [[location(1)]] uv: vec2<f32>;
 };
 
+struct CameraUniform {
+  view_proj: mat4x4<f32>;
+};
+
+[[group(1), binding(0)]]
+var<uniform> camera: CameraUniform;
+
 [[stage(vertex)]]
 fn vs_main(vertex: Vertex)
   -> VertexOutput {
   var out: VertexOutput;
 
-  out.clip_position = vec4<f32>(vec3<f32>(vertex.position.x, vertex.position.y - 0.1, vertex.position.z), 1.0);
+  out.clip_position = camera.view_proj * vec4<f32>(vertex.position, 1.0);
   out.uv = vertex.uv;
   return out;
 }

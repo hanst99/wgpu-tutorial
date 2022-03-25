@@ -8,6 +8,7 @@ use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::path::Path;
 use wgpu::include_wgsl;
+use wgpu::util::DeviceExt;
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
@@ -15,6 +16,7 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod camera;
 mod model;
 mod texture;
 
@@ -74,6 +76,9 @@ struct State {
     model: Model,
     diffuse_bind_group: wgpu::BindGroup,
     diffuse_texture: Texture,
+    camera: camera::Camera,
+    camera_buffer: wgpu::Buffer,
+    camera_bind_group: wgpu::BindGroup,
 }
 
 fn interpolate_color(from: wgpu::Color, to: wgpu::Color, factor: f64) -> wgpu::Color {
@@ -90,12 +95,12 @@ impl State {
         device: &wgpu::Device,
         shader: &wgpu::ShaderModule,
         config: &wgpu::SurfaceConfiguration,
-        texture_bind_group_layout: &wgpu::BindGroupLayout,
+        bind_group_layouts: &[&wgpu::BindGroupLayout],
     ) -> wgpu::RenderPipeline {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[texture_bind_group_layout],
+                bind_group_layouts,
                 push_constant_ranges: &[],
             });
 
@@ -224,11 +229,52 @@ impl State {
         };
 
         let shader = device.create_shader_module(&include_wgsl!("shader.wgsl"));
-        let render_pipeline =
-            Self::make_pipeline(&device, &shader, &config, &texture_bind_group_layout);
+
+        let camera = camera::Camera::new(&config);
+
+        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[camera.to_uniform()]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let camera_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("camera_bind_group_layout"),
+            });
+
+        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &camera_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+            label: Some("camera_bind_group"),
+        });
+
+        let render_pipeline = Self::make_pipeline(
+            &device,
+            &shader,
+            &config,
+            &[&texture_bind_group_layout, &camera_bind_group_layout],
+        );
         let shader_alter = device.create_shader_module(&include_wgsl!("shader_alter.wgsl"));
-        let render_pipeline_alter =
-            Self::make_pipeline(&device, &shader_alter, &config, &texture_bind_group_layout);
+        let render_pipeline_alter = Self::make_pipeline(
+            &device,
+            &shader_alter,
+            &config,
+            &[&texture_bind_group_layout],
+        );
 
         let render_pipelines = Flip::new(render_pipeline, render_pipeline_alter);
 
@@ -246,6 +292,9 @@ impl State {
             model,
             diffuse_bind_group,
             diffuse_texture,
+            camera,
+            camera_buffer,
+            camera_bind_group,
         })
     }
 
@@ -284,6 +333,46 @@ impl State {
                         self.render_pipelines.flip();
                         true
                     }
+                    VirtualKeyCode::W => {
+                        self.camera.pan((0.0, 0.0, -0.01));
+                        true
+                    }
+                    VirtualKeyCode::S => {
+                        self.camera.pan((0.0, 0.0, 0.01));
+                        true
+                    }
+                    VirtualKeyCode::A => {
+                        self.camera.pan((-0.01, 0.0, 0.0));
+                        true
+                    }
+                    VirtualKeyCode::D => {
+                        self.camera.pan((0.01, 0.0, 0.0));
+                        true
+                    }
+                    VirtualKeyCode::PageUp => {
+                        self.camera.pan((0.0, 0.01, 0.0));
+                        true
+                    }
+                    VirtualKeyCode::PageDown => {
+                        self.camera.pan((0.0, -0.01, 0.0));
+                        true
+                    }
+                    VirtualKeyCode::Q => {
+                        self.camera.rotate_h(-0.01);
+                        true
+                    }
+                    VirtualKeyCode::E => {
+                        self.camera.rotate_h(0.01);
+                        true
+                    }
+                    VirtualKeyCode::Up => {
+                        self.camera.rotate_v(0.01);
+                        true
+                    }
+                    VirtualKeyCode::Down => {
+                        self.camera.rotate_v(-0.01);
+                        true
+                    }
                     _ => false,
                 })
             }
@@ -291,7 +380,13 @@ impl State {
         }
     }
 
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        self.queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera.to_uniform()]),
+        );
+    }
 
     fn render(&mut self) -> std::result::Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
@@ -316,8 +411,10 @@ impl State {
                 }],
                 depth_stencil_attachment: None,
             });
+
             render_pass.set_pipeline(&self.render_pipelines.get());
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.model.vertex_buffer().slice(..));
             render_pass.set_index_buffer(
                 self.model.index_buffer().slice(..),
