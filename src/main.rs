@@ -359,19 +359,19 @@ impl State {
                         true
                     }
                     VirtualKeyCode::Q => {
-                        self.camera.rotate_h(-0.01);
+                        self.camera.rotate_h(-0.04);
                         true
                     }
                     VirtualKeyCode::E => {
-                        self.camera.rotate_h(0.01);
+                        self.camera.rotate_h(0.04);
                         true
                     }
                     VirtualKeyCode::Up => {
-                        self.camera.rotate_v(0.01);
+                        self.camera.rotate_v(0.04);
                         true
                     }
                     VirtualKeyCode::Down => {
-                        self.camera.rotate_v(-0.01);
+                        self.camera.rotate_v(-0.04);
                         true
                     }
                     _ => false,
