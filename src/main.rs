@@ -115,11 +115,11 @@ impl State {
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
-                targets: &[wgpu::ColorTargetState {
+                targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
-                }],
+                })],
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -162,11 +162,12 @@ impl State {
                 None,
             )
             .await?;
+        let preferred_format = *surface.get_supported_formats(&adapter).first().ok_or(
+            GraphicsError("No supported formats"),
+        )?;
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface
-                .get_preferred_format(&adapter)
-                .ok_or(GraphicsError("Get preferred format failed"))?,
+            format: preferred_format,
             width: size.width,
             height: size.height,
             present_mode: wgpu::PresentMode::Fifo,
@@ -228,7 +229,7 @@ impl State {
             a: 1.0,
         };
 
-        let shader = device.create_shader_module(&include_wgsl!("shader.wgsl"));
+        let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
 
         let camera = camera::Camera::new(&config);
 
@@ -268,7 +269,7 @@ impl State {
             &config,
             &[&texture_bind_group_layout, &camera_bind_group_layout],
         );
-        let shader_alter = device.create_shader_module(&include_wgsl!("shader_alter.wgsl"));
+        let shader_alter = device.create_shader_module(include_wgsl!("shader_alter.wgsl"));
         let render_pipeline_alter = Self::make_pipeline(
             &device,
             &shader_alter,
@@ -401,14 +402,14 @@ impl State {
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
-                color_attachments: &[wgpu::RenderPassColorAttachment {
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(self.background_color),
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: None,
             });
 
